@@ -1,27 +1,167 @@
-# Operation System — integrated into admindash
+"use client"
 
-The full Operation System is now a page **inside** your admin app, behind your existing JWT login.
+import * as React from "react"
+import * as LabelPrimitive from "@radix-ui/react-label"
+import { Slot } from "@radix-ui/react-slot"
+import {
+  Controller,
+  FormProvider,
+  useFormContext,
+  useFormState,
+  type ControllerProps,
+  type FieldPath,
+  type FieldValues,
+} from "react-hook-form"
 
-## What was added
-- `public/os.html` — the Operation System UI (tabs: Today, Finance, DevOps, Apps, Plans, Wiki, Media, Map; Health Board; AI task chat; Plan Finder). It calls `/api/mcp` and `/api/ai` using your `auth_token` cookie as a Bearer token.
-- `app/api/mcp/route.ts` — live-data proxy (Zoho leads + Vercel deploys now; Supabase advisors if SUPABASE_TOKEN set; Gmail/Drive return empty until Phase 2). Auth-checked with your JWT.
-- `app/api/ai/route.ts` — the per-task AI chat (Anthropic). Auth-checked.
-- `app/dashboard/os/page.tsx` — a dashboard page that embeds the OS (reuses your sidebar + auth).
-- `components/Sidebar.tsx` — new nav item **Operation System** (`/dashboard/os`).
-- `next.config.ts` — ignore lint/type errors during build (so the embedded proxy never blocks deploy).
-- `.env.example` — new env vars for live data.
+import { cn } from "@/lib/utils"
+import { Label } from "@/components/ui/label"
 
-## Nothing was removed — your existing dashboard/users/reports/analytics/settings stay as-is.
+const Form = FormProvider
 
-## Deploy
-1. `npm install`
-2. Set env vars (Vercel project → Settings → Environment Variables) from `.env.example`: keep your auth vars, add `VERCEL_TOKEN`, `VERCEL_TEAM`, `ZOHO_*`, `ANTHROPIC_API_KEY`, (`SUPABASE_TOKEN` optional).
-3. `vercel --prod` (or push to `segattihall-ops/admindash` and let Vercel build).
-4. Open `/dashboard/os` after logging in.
+type FormFieldContextValue<
+  TFieldValues extends FieldValues = FieldValues,
+  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>,
+> = {
+  name: TName
+}
 
-## Live data status
-- ✅ Vercel health, Plan Finder, Wiki, Calendar — work immediately.
-- ✅ Leads (Zoho) — once ZOHO_* env vars set.
-- ✅ AI task chat — once ANTHROPIC_API_KEY set.
-- ⏳ Finance/Ledger (Gmail) + Drive media — Phase 2 (Google OAuth).
-- ⏳ Supabase advisors — set SUPABASE_TOKEN (a Supabase Management API token).
+const FormFieldContext = React.createContext<FormFieldContextValue>(
+  {} as FormFieldContextValue
+)
+
+const FormField = <
+  TFieldValues extends FieldValues = FieldValues,
+  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>,
+>({
+  ...props
+}: ControllerProps<TFieldValues, TName>) => {
+  return (
+    <FormFieldContext.Provider value={{ name: props.name }}>
+      <Controller {...props} />
+    </FormFieldContext.Provider>
+  )
+}
+
+const useFormField = () => {
+  const fieldContext = React.useContext(FormFieldContext)
+  const itemContext = React.useContext(FormItemContext)
+  const { getFieldState } = useFormContext()
+  const formState = useFormState({ name: fieldContext.name })
+  const fieldState = getFieldState(fieldContext.name, formState)
+
+  if (!fieldContext) {
+    throw new Error("useFormField should be used within <FormField>")
+  }
+
+  const { id } = itemContext
+
+  return {
+    id,
+    name: fieldContext.name,
+    formItemId: `${id}-form-item`,
+    formDescriptionId: `${id}-form-item-description`,
+    formMessageId: `${id}-form-item-message`,
+    ...fieldState,
+  }
+}
+
+type FormItemContextValue = {
+  id: string
+}
+
+const FormItemContext = React.createContext<FormItemContextValue>(
+  {} as FormItemContextValue
+)
+
+function FormItem({ className, ...props }: React.ComponentProps<"div">) {
+  const id = React.useId()
+
+  return (
+    <FormItemContext.Provider value={{ id }}>
+      <div
+        data-slot="form-item"
+        className={cn("grid gap-2", className)}
+        {...props}
+      />
+    </FormItemContext.Provider>
+  )
+}
+
+function FormLabel({
+  className,
+  ...props
+}: React.ComponentProps<typeof LabelPrimitive.Root>) {
+  const { error, formItemId } = useFormField()
+
+  return (
+    <Label
+      data-slot="form-label"
+      data-error={!!error}
+      className={cn("data-[error=true]:text-destructive", className)}
+      htmlFor={formItemId}
+      {...props}
+    />
+  )
+}
+
+function FormControl({ ...props }: React.ComponentProps<typeof Slot>) {
+  const { error, formItemId, formDescriptionId, formMessageId } = useFormField()
+
+  return (
+    <Slot
+      data-slot="form-control"
+      id={formItemId}
+      aria-describedby={
+        !error
+          ? `${formDescriptionId}`
+          : `${formDescriptionId} ${formMessageId}`
+      }
+      aria-invalid={!!error}
+      {...props}
+    />
+  )
+}
+
+function FormDescription({ className, ...props }: React.ComponentProps<"p">) {
+  const { formDescriptionId } = useFormField()
+
+  return (
+    <p
+      data-slot="form-description"
+      id={formDescriptionId}
+      className={cn("text-muted-foreground text-sm", className)}
+      {...props}
+    />
+  )
+}
+
+function FormMessage({ className, ...props }: React.ComponentProps<"p">) {
+  const { error, formMessageId } = useFormField()
+  const body = error ? String(error?.message ?? "") : props.children
+
+  if (!body) {
+    return null
+  }
+
+  return (
+    <p
+      data-slot="form-message"
+      id={formMessageId}
+      className={cn("text-destructive text-sm", className)}
+      {...props}
+    >
+      {body}
+    </p>
+  )
+}
+
+export {
+  useFormField,
+  Form,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormDescription,
+  FormMessage,
+  FormField,
+}
