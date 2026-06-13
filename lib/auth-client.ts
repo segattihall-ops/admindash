@@ -6,7 +6,11 @@ import { User } from '@/types/auth';
 const TOKEN_KEY = 'auth_token';
 
 export function setAuthToken(token: string) {
-  Cookies.set(TOKEN_KEY, token, { expires: 7, secure: true, sameSite: 'strict' });
+  Cookies.set(TOKEN_KEY, token, {
+    expires: 7,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+  });
 }
 
 export function getAuthToken(): string | undefined {
