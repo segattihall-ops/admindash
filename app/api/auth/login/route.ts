@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       message: 'Login realizado com sucesso',
     });
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('Login error:', error instanceof Error ? error.message : String(error));
     return NextResponse.json(
       { success: false, message: 'Erro interno do servidor' },
       { status: 500 }
